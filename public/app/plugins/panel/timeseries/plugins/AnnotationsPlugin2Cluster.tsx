@@ -337,6 +337,12 @@ export const AnnotationsPlugin2Cluster = ({
               portalRoot={portalRoot}
               canExecuteActions={userCanExecuteActions}
               replaceVariables={replaceVariables}
+              plot={plot}
+              onResizeRange={
+                isWipFrame
+                  ? (from, to) => setNewRange({ from, to })
+                  : undefined
+              }
             />
           );
         }
