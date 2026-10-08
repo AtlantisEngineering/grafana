@@ -6,11 +6,13 @@ import { maybeSortFrame } from '@grafana/data/internal';
 import { DEFAULT_ANNOTATION_COLOR } from '@grafana/ui';
 import { type TimeRange2 } from '@grafana/ui/internal';
 
+import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
 import { getXAnnotationFrames, getXYAnnotationFrames } from '../utils';
 
 interface Props {
   annotations?: DataFrame[];
   newRange: TimeRange2 | null;
+  newAnnotation?: NewAnnotationPrefill;
 }
 
 const DEFAULT_ANNOTATION_COLOR_HEX8 = tinycolor(DEFAULT_ANNOTATION_COLOR).toHex8String();
@@ -19,7 +21,7 @@ const DEFAULT_ANNOTATION_COLOR_HEX8 = tinycolor(DEFAULT_ANNOTATION_COLOR).toHex8
  * edit mode wip frame
  * @param newRange
  */
-const buildWipAnnoFrame = (newRange: TimeRange2) => {
+const buildWipAnnoFrame = (newRange: TimeRange2, newAnnotation?: NewAnnotationPrefill) => {
   let isRegion = newRange.to > newRange.from;
 
   const wipAnnoFrame = arrayToDataFrame([
@@ -29,7 +31,8 @@ const buildWipAnnoFrame = (newRange: TimeRange2) => {
       isRegion: isRegion,
       // #00d3ffff
       color: DEFAULT_ANNOTATION_COLOR_HEX8,
-      tags: [],
+      tags: newAnnotation?.tags ?? [],
+      ...(newAnnotation?.text != null && { text: newAnnotation.text }),
     },
   ]);
 
@@ -42,7 +45,7 @@ const buildWipAnnoFrame = (newRange: TimeRange2) => {
   return wipAnnoFrame;
 };
 
-export const useAnnotations = ({ annotations, newRange }: Props) => {
+export const useAnnotations = ({ annotations, newRange, newAnnotation }: Props) => {
   return useMemo(() => {
     let sortedAnnotations = annotations?.map((frame) =>
       maybeSortFrame(
@@ -54,9 +57,9 @@ export const useAnnotations = ({ annotations, newRange }: Props) => {
     const xyAnnos = getXYAnnotationFrames(annotations);
 
     if (newRange) {
-      xAnnos.push(buildWipAnnoFrame(newRange));
+      xAnnos.push(buildWipAnnoFrame(newRange, newAnnotation));
     }
 
     return { xAnnos, xyAnnos };
-  }, [annotations, newRange]);
+  }, [annotations, newRange, newAnnotation]);
 };

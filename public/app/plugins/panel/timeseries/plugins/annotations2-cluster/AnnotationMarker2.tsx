@@ -19,6 +19,8 @@ import { type TimeZone } from '@grafana/schema';
 import { ClickOutsideWrapper, floatingUtils, useStyles2 } from '@grafana/ui';
 import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/utils';
 
+import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
+
 import { AnnotationEditor2 } from './AnnotationEditor2';
 import { AnnotationTooltip2 } from './AnnotationTooltip2';
 import { AnnotationTooltip2Cluster } from './AnnotationTooltip2Cluster';
@@ -52,6 +54,10 @@ interface AnnotationMarkerProps {
   // Only provided for WIP markers — drives the parent's setNewRange. For
   // existing annotations the marker manages a local override instead.
   onResizeRange?: (from: number, to: number) => void;
+  // Opens the editor without user interaction, e.g. when requested from the URL
+  startEditing?: boolean;
+  editPrefill?: NewAnnotationPrefill;
+  onEditDone?: () => void;
 }
 
 export const AnnotationMarker2 = ({
@@ -69,6 +75,9 @@ export const AnnotationMarker2 = ({
   isPinned,
   plot,
   onResizeRange,
+  startEditing,
+  editPrefill,
+  onEditDone,
 }: AnnotationMarkerProps) => {
   const styles = useStyles2(getStyles);
   const placement = 'bottom';
@@ -78,6 +87,14 @@ export const AnnotationMarker2 = ({
   // Set when editing
   const [editAnnotationId, setEditAnnotationId] = useState(exitWipEdit != null ? annoIdx : null);
   const [isHovering, setIsHovering] = useState(false);
+  const startEditId = startEditing ? annoVals.id?.[annoIdx] : undefined;
+
+  useEffect(() => {
+    if (startEditId != null) {
+      setEditAnnotationId(startEditId);
+    }
+  }, [startEditId]);
+
   const isClustering =
     annoVals.isCluster?.[annoIdx] && annoVals.clusterIdx?.[annoIdx] != null && annoVals.clusterIdx?.[annoIdx] > -1;
   // Live override of (time, timeEnd) for the marker's primary annotation
@@ -190,8 +207,10 @@ export const AnnotationMarker2 = ({
         liveTime={canSyncBoundaries ? liveTime : undefined}
         liveTimeEnd={canSyncBoundaries ? liveTimeEnd : undefined}
         onTimeRangeChange={canSyncBoundaries ? dispatchResize : undefined}
+        prefill={editPrefill}
         dismiss={() => {
           exitWipEdit?.();
+          onEditDone?.();
           setEditAnnotationId(null);
           onClose();
         }}

@@ -19,6 +19,8 @@ import { type TimeZone } from '@grafana/schema';
 import { ClickOutsideWrapper, floatingUtils, useStyles2 } from '@grafana/ui';
 import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/utils';
 
+import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
+
 import { AnnotationEditor2 } from './AnnotationEditor2';
 import { AnnotationTooltip2 } from './AnnotationTooltip2';
 
@@ -46,6 +48,10 @@ interface AnnotationMarkerProps {
   replaceVariables: InterpolateFunction;
   plot?: uPlot | null;
   onResizeRange?: (from: number, to: number) => void;
+  // Opens the editor without user interaction, e.g. when requested from the URL
+  startEditing?: boolean;
+  editPrefill?: NewAnnotationPrefill;
+  onEditDone?: () => void;
 }
 
 const STATE_DEFAULT = 0;
@@ -66,6 +72,9 @@ export const AnnotationMarker2 = ({
   isPinned,
   plot,
   onResizeRange,
+  startEditing,
+  editPrefill,
+  onEditDone,
 }: AnnotationMarkerProps) => {
   const styles = useStyles2(getStyles);
   const placement = 'bottom';
@@ -74,6 +83,13 @@ export const AnnotationMarker2 = ({
 
   const [state, setState] = useState(exitWipEdit != null ? STATE_EDITING : STATE_DEFAULT);
   const [isHovering, setIsHovering] = useState(false);
+
+  useEffect(() => {
+    if (startEditing) {
+      setState(STATE_EDITING);
+    }
+  }, [startEditing]);
+
   // Live override of (time, timeEnd) while the editor is open. Allows
   // drag-handles to reposition an existing (non-WIP) annotation visually
   // before the user clicks Save. WIP markers route resizes through the
@@ -158,8 +174,10 @@ export const AnnotationMarker2 = ({
       liveTime={liveTime}
       liveTimeEnd={liveTimeEnd}
       onTimeRangeChange={dispatchResize}
+      prefill={editPrefill}
       dismiss={() => {
         exitWipEdit?.();
+        onEditDone?.();
         setState(STATE_DEFAULT);
         onClose();
       }}

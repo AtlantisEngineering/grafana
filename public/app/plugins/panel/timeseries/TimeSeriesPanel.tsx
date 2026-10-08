@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
   alignTimeRangeCompareData,
@@ -25,6 +25,11 @@ import { TimeSeries } from 'app/core/components/TimeSeries/TimeSeries';
 import { TimeSeriesTooltip } from './TimeSeriesTooltip';
 import { type Options } from './panelcfg.gen';
 import { AnnotationsPlugin } from './plugins/AnnotationPlugin';
+import {
+  clearAnnotationUrlPrefill,
+  getAnnotationUrlEdit,
+  getAnnotationUrlPrefill,
+} from './plugins/annotationUrlPrefill';
 import { ExemplarsPlugin, getVisibleLabels } from './plugins/ExemplarsPlugin';
 import { OutsideRangePlugin } from './plugins/OutsideRangePlugin';
 import { ThresholdControlsPlugin } from './plugins/ThresholdControlsPlugin';
@@ -50,6 +55,7 @@ export const TimeSeriesPanel = ({
     sync,
     eventsScope,
     canAddAnnotations,
+    canEditAnnotations,
     onThresholdsChange,
     canEditThresholds,
     showThresholds,
@@ -109,7 +115,27 @@ export const TimeSeriesPanel = ({
   }, [frames, id]);
 
   const enableAnnotationCreation = Boolean(canAddAnnotations && canAddAnnotations());
-  const [newAnnotationRange, setNewAnnotationRange] = useState<TimeRange2 | null>(null);
+  // A new annotation can be opened prefilled from the URL
+  const [urlPrefill] = useState(() => (enableAnnotationCreation ? getAnnotationUrlPrefill(id) : null));
+  const [newAnnotationRange, setNewAnnotationRangeState] = useState<TimeRange2 | null>(urlPrefill?.range ?? null);
+  // An existing annotation can be opened in edit mode from the URL
+  const [urlEdit] = useState(() => (canEditAnnotations?.() ? getAnnotationUrlEdit(id) : null));
+  const [editAnnotationId, setEditAnnotationId] = useState(urlEdit?.id ?? null);
+  const [newAnnotationPrefill, setNewAnnotationPrefill] = useState(urlPrefill?.prefill ?? urlEdit?.prefill);
+  const onEditAnnotationDone = useCallback(() => {
+    setEditAnnotationId(null);
+    setNewAnnotationPrefill(undefined);
+    clearAnnotationUrlPrefill();
+  }, []);
+  const hasUrlPrefill = useRef(urlPrefill != null);
+  const setNewAnnotationRange = useCallback((range: TimeRange2 | null) => {
+    setNewAnnotationRangeState(range);
+    if (range == null && hasUrlPrefill.current) {
+      hasUrlPrefill.current = false;
+      setNewAnnotationPrefill(undefined);
+      clearAnnotationUrlPrefill();
+    }
+  }, []);
   const cursorSync = sync?.() ?? DashboardCursorSync.Off;
 
   if (!frames || suggestions) {
@@ -230,6 +256,9 @@ export const TimeSeriesPanel = ({
                   timeZone={timeZone}
                   newRange={newAnnotationRange}
                   setNewRange={setNewAnnotationRange}
+                  newAnnotation={newAnnotationPrefill}
+                  editAnnotationId={editAnnotationId}
+                  onEditAnnotationDone={onEditAnnotationDone}
                 />
                 <OutsideRangePlugin config={uplotConfig} onChangeTimeRange={onChangeTimeRange} />
                 {data.annotations && (
