@@ -4,17 +4,21 @@ import { type TimeRange2 } from '@grafana/ui/internal';
 export interface NewAnnotationPrefill {
   text?: string;
   tags?: string[];
+  // Only for existing annotations
+  removeTags?: string[];
 }
 
-const URL_PARAMS = ['annotPanelId', 'annotFrom', 'annotTo', 'annotText', 'annotTags', 'annotEditId'];
+const URL_PARAMS = ['annotPanelId', 'annotFrom', 'annotTo', 'annotText', 'annotTags', 'annotRemoveTags', 'annotEditId'];
 
-function readPrefill(params: URLSearchParams): NewAnnotationPrefill {
-  const tags = (params.get('annotTags') ?? '')
+function readTags(params: URLSearchParams, name: string): string[] {
+  return (params.get(name) ?? '')
     .split(',')
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
+}
 
-  return { text: params.get('annotText') ?? undefined, tags };
+function readPrefill(params: URLSearchParams): NewAnnotationPrefill {
+  return { text: params.get('annotText') ?? undefined, tags: readTags(params, 'annotTags') };
 }
 
 /**
@@ -40,7 +44,7 @@ export function getAnnotationUrlPrefill(panelId: number): { range: TimeRange2; p
 
 /**
  * Reads an existing annotation to open in edit mode on the given panel (annotPanelId, annotEditId).
- * annotText is appended to its text and annotTags are added to its tags.
+ * annotText is appended to its text, annotRemoveTags are removed from its tags and annotTags are added to them.
  */
 export function getAnnotationUrlEdit(panelId: number): { id: number; prefill: NewAnnotationPrefill } | null {
   const params = locationService.getSearch();
@@ -50,19 +54,20 @@ export function getAnnotationUrlEdit(panelId: number): { id: number; prefill: Ne
   if (Number(params.get('annotPanelId')) !== panelId || !editIdRaw || !Number.isFinite(editId)) {
     return null;
   }
-  return { id: editId, prefill: readPrefill(params) };
+  return { id: editId, prefill: { ...readPrefill(params), removeTags: readTags(params, 'annotRemoveTags') } };
 }
 
 /** Editor defaults of an existing annotation with the prefill appended, skipping what is already there */
 export function applyAnnotationPrefill(text: string | undefined, tags: string[], prefill?: NewAnnotationPrefill) {
   const description = text ?? '';
   const extraText = prefill?.text;
-  const extraTags = (prefill?.tags ?? []).filter((tag) => !tags.includes(tag));
+  const keptTags = tags.filter((tag) => !prefill?.removeTags?.includes(tag));
+  const extraTags = (prefill?.tags ?? []).filter((tag) => !keptTags.includes(tag));
 
   return {
     description:
       extraText && !description.includes(extraText) ? [description, extraText].filter(Boolean).join('\n') : description,
-    tags: [...tags, ...extraTags],
+    tags: [...keptTags, ...extraTags],
   };
 }
 

@@ -46,7 +46,10 @@ describe('getAnnotationUrlEdit', () => {
   it('reads the annotation id for the matching panel', () => {
     locationService.push('/d/abc?annotPanelId=6&annotEditId=42&annotText=Reviewed%20by%3A%20&annotTags=Confirmed');
 
-    expect(getAnnotationUrlEdit(6)).toEqual({ id: 42, prefill: { text: 'Reviewed by: ', tags: ['Confirmed'] } });
+    expect(getAnnotationUrlEdit(6)).toEqual({
+      id: 42,
+      prefill: { text: 'Reviewed by: ', tags: ['Confirmed'], removeTags: [] },
+    });
     expect(getAnnotationUrlEdit(7)).toBeNull();
   });
 
@@ -64,6 +67,14 @@ describe('applyAnnotationPrefill', () => {
       description: 'TP from email\nReviewed by: ',
       tags: ['M1', 'TP', 'Confirmed'],
     });
+  });
+
+  it('removes tags before adding the new ones', () => {
+    expect(applyAnnotationPrefill('x', ['M1', 'TP'], { tags: ['FP', 'Confirmed'], removeTags: ['TP', 'FN'] }).tags).toEqual([
+      'M1',
+      'FP',
+      'Confirmed',
+    ]);
   });
 
   it('does not append text that is already there', () => {
