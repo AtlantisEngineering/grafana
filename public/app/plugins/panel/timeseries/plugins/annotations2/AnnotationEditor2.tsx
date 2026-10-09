@@ -26,6 +26,8 @@ import { Form } from 'app/core/components/Form/Form';
 import { TagFilter } from 'app/core/components/TagFilter/TagFilter';
 import { annotationServer } from 'app/features/annotations/api';
 
+import { applyAnnotationPrefill, type NewAnnotationPrefill } from '../annotationUrlPrefill';
+
 import { AnnotationTooltipHeaderCloseIcon } from './AnnotationTooltipHeaderCloseIcon';
 
 interface Props {
@@ -36,6 +38,7 @@ interface Props {
   liveTime?: number;
   liveTimeEnd?: number | null;
   onTimeRangeChange?: (time: number, timeEnd: number | null) => void;
+  prefill?: NewAnnotationPrefill;
 }
 
 interface AnnotationEditFormDTO {
@@ -51,6 +54,7 @@ export const AnnotationEditor2 = ({
   liveTime,
   liveTimeEnd,
   onTimeRangeChange,
+  prefill,
   ...otherProps
 }: Props) => {
   const styles = useStyles2(getStyles);
@@ -199,7 +203,7 @@ export const AnnotationEditor2 = ({
       </div>
       <Form<AnnotationEditFormDTO>
         onSubmit={onSubmit}
-        defaultValues={{ description: annoVals.text?.[annoIdx], tags: annoVals.tags?.[annoIdx] || [] }}
+        defaultValues={applyAnnotationPrefill(annoVals.text?.[annoIdx], annoVals.tags?.[annoIdx] || [], prefill)}
       >
         {({ register, errors, control }) => {
           return (

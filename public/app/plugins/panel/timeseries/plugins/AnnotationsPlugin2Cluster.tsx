@@ -15,6 +15,7 @@ import {
 } from '@grafana/ui';
 import { type TimeRange2 } from '@grafana/ui/internal';
 
+import { type NewAnnotationPrefill } from './annotationUrlPrefill';
 import { AnnotationMarker2 } from './annotations2-cluster/AnnotationMarker2';
 import { type AnnotationVals, type XYAnnoVals } from './annotations2-cluster/types';
 import { ClusteringMode, useAnnotationClustering } from './annotations2-cluster/useAnnotationClustering';
@@ -33,6 +34,9 @@ interface AnnotationsPlugin2ClusterProps {
   timeZone: TimeZone;
   newRange: TimeRange2 | null;
   setNewRange: (newRange: TimeRange2 | null) => void;
+  newAnnotation?: NewAnnotationPrefill;
+  editAnnotationId?: number | null;
+  onEditAnnotationDone?: () => void;
   canvasRegionRendering?: boolean;
   replaceVariables: InterpolateFunction;
 }
@@ -76,6 +80,9 @@ export const AnnotationsPlugin2Cluster = ({
   config,
   newRange,
   setNewRange,
+  newAnnotation,
+  editAnnotationId,
+  onEditAnnotationDone,
   replaceVariables,
   canvasRegionRendering = true,
   options,
@@ -96,7 +103,7 @@ export const AnnotationsPlugin2Cluster = ({
   const { canExecuteActions } = usePanelContext();
   const userCanExecuteActions = canExecuteActions?.() ?? false;
 
-  const { xAnnos, xyAnnos } = useAnnotations({ annotations, newRange });
+  const { xAnnos, xyAnnos } = useAnnotations({ annotations, newRange, newAnnotation });
 
   const { annotations: clusteredAnnos } = useAnnotationClustering({
     annotations: xAnnos,
@@ -126,7 +133,7 @@ export const AnnotationsPlugin2Cluster = ({
       xAxisRef.current = u.root.querySelector<HTMLDivElement>('.u-axis')!;
       plotRef.current = u;
       // If annos were defined before uPlot ready is called, we need to force the component to re-render annos now that uplot is available
-      if (annotations?.length) {
+      if (annotations?.length || newRangeRef.current) {
         forceUpdate();
       }
     });
@@ -321,6 +328,7 @@ export const AnnotationsPlugin2Cluster = ({
 
           // The tooltip should render as pinned if the pinned state index matches this annotation
           const isPinned = pinnedAnnotationId === annotationKey;
+          const isUrlEdit = editAnnotationId != null && vals.id?.[i] === editAnnotationId;
 
           markers.push(
             <AnnotationMarker2
@@ -338,6 +346,9 @@ export const AnnotationsPlugin2Cluster = ({
               canExecuteActions={userCanExecuteActions}
               replaceVariables={replaceVariables}
               plot={plot}
+              startEditing={isUrlEdit}
+              editPrefill={isUrlEdit ? newAnnotation : undefined}
+              onEditDone={isUrlEdit ? onEditAnnotationDone : undefined}
               onResizeRange={
                 isWipFrame
                   ? (from, to) => setNewRange({ from, to })

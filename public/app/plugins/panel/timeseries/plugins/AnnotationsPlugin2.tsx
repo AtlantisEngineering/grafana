@@ -14,6 +14,7 @@ import {
   useTheme2,
 } from '@grafana/ui';
 
+import { type NewAnnotationPrefill } from './annotationUrlPrefill';
 import { AnnotationMarker2 } from './annotations2/AnnotationMarker2';
 import { ANNOTATION_LANE_SIZE, getXAnnotationFrames, getXYAnnotationFrames } from './utils';
 
@@ -29,6 +30,9 @@ interface AnnotationsPluginProps {
   timeZone: TimeZone;
   newRange: TimeRange2 | null;
   setNewRange: (newRange: TimeRange2 | null) => void;
+  newAnnotation?: NewAnnotationPrefill;
+  editAnnotationId?: number | null;
+  onEditAnnotationDone?: () => void;
   canvasRegionRendering?: boolean;
   replaceVariables: InterpolateFunction;
   multiLane?: boolean;
@@ -82,6 +86,9 @@ export const AnnotationsPlugin2 = ({
   config,
   newRange,
   setNewRange,
+  newAnnotation,
+  editAnnotationId,
+  onEditAnnotationDone,
   replaceVariables,
   canvasRegionRendering = true,
   multiLane = false,
@@ -110,6 +117,8 @@ export const AnnotationsPlugin2 = ({
           timeEnd: isRegion ? newRange.to : null,
           isRegion: isRegion,
           color: DEFAULT_ANNOTATION_COLOR_HEX8,
+          ...(newAnnotation?.text != null && { text: newAnnotation.text }),
+          tags: newAnnotation?.tags ?? [],
         },
       ]);
 
@@ -127,7 +136,7 @@ export const AnnotationsPlugin2 = ({
       xAnnos,
       xyAnnos,
     };
-  }, [annotations, newRange]);
+  }, [annotations, newRange, newAnnotation]);
 
   const exitWipEdit = useCallback(() => {
     setNewRange(null);
@@ -150,7 +159,7 @@ export const AnnotationsPlugin2 = ({
       xAxisRef.current = xAxisEl;
       plotRef.current = u;
       // If annos were defined before uPlot ready is called, we need to force the component to re-render annos now that uplot is available
-      if (annotations?.length) {
+      if (annotations?.length || newRangeRef.current) {
         forceUpdate();
       }
     });
@@ -305,6 +314,7 @@ export const AnnotationsPlugin2 = ({
 
           // The tooltip should render as pinned if the pinned state index matches this annotation
           const isPinned = pinnedAnnotationId === annotationKey;
+          const isUrlEdit = editAnnotationId != null && vals.id?.[i] === editAnnotationId;
 
           markers.push(
             <AnnotationMarker2
@@ -322,6 +332,9 @@ export const AnnotationsPlugin2 = ({
               canExecuteActions={userCanExecuteActions}
               replaceVariables={replaceVariables}
               plot={plot}
+              startEditing={isUrlEdit}
+              editPrefill={isUrlEdit ? newAnnotation : undefined}
+              onEditDone={isUrlEdit ? onEditAnnotationDone : undefined}
               onResizeRange={
                 isWipFrame
                   ? (from, to) => setNewRange({ from, to })
