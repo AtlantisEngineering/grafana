@@ -333,7 +333,7 @@ export const AnnotationsPlugin2 = ({
               replaceVariables={replaceVariables}
               plot={plot}
               startEditing={isUrlEdit}
-              editPrefill={isUrlEdit ? newAnnotation : undefined}
+              editPrefill={isUrlEdit || isWipFrame ? newAnnotation : undefined}
               onEditDone={isUrlEdit ? onEditAnnotationDone : undefined}
               onResizeRange={
                 isWipFrame

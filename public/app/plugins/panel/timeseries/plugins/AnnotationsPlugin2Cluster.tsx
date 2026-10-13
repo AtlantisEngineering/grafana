@@ -347,7 +347,7 @@ export const AnnotationsPlugin2Cluster = ({
               replaceVariables={replaceVariables}
               plot={plot}
               startEditing={isUrlEdit}
-              editPrefill={isUrlEdit ? newAnnotation : undefined}
+              editPrefill={isUrlEdit || isWipFrame ? newAnnotation : undefined}
               onEditDone={isUrlEdit ? onEditAnnotationDone : undefined}
               onResizeRange={
                 isWipFrame

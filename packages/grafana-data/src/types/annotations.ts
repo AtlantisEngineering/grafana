@@ -55,6 +55,8 @@ export interface AnnotationEventUIModel {
   to: number;
   tags: string[];
   description: string;
+  // Stored in the annotation's data field; left as is when not given
+  data?: Record<string, unknown>;
 }
 
 /**

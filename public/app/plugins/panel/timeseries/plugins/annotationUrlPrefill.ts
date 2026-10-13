@@ -1,14 +1,20 @@
-import { locationService } from '@grafana/runtime';
+import { store } from '@grafana/data';
+import { getBackendSrv, locationService } from '@grafana/runtime';
 import { type TimeRange2 } from '@grafana/ui/internal';
+import { contextSrv } from 'app/core/services/context_srv';
 
 export interface NewAnnotationPrefill {
   text?: string;
   tags?: string[];
   // Only for existing annotations
   removeTags?: string[];
+  // Key of the annotation's data field that takes the name of the person saving it, e.g. submittedBy
+  nameKey?: string;
+  // Default the name to the logged in user instead of the last name typed in this browser
+  nameAuto?: boolean;
 }
 
-const URL_PARAMS = ['annotPanelId', 'annotFrom', 'annotTo', 'annotText', 'annotTags', 'annotRemoveTags', 'annotEditId'];
+const URL_PARAMS = ['annotPanelId', 'annotFrom', 'annotTo', 'annotText', 'annotTags', 'annotRemoveTags', 'annotEditId', 'annotNameKey', 'annotNameAuto'];
 
 function readTags(params: URLSearchParams, name: string): string[] {
   return (params.get(name) ?? '')
@@ -18,12 +24,17 @@ function readTags(params: URLSearchParams, name: string): string[] {
 }
 
 function readPrefill(params: URLSearchParams): NewAnnotationPrefill {
-  return { text: params.get('annotText') ?? undefined, tags: readTags(params, 'annotTags') };
+  return {
+    text: params.get('annotText') ?? undefined,
+    tags: readTags(params, 'annotTags'),
+    nameKey: params.get('annotNameKey') || undefined,
+    nameAuto: params.get('annotNameAuto') === '1',
+  };
 }
 
 /**
  * Reads a new annotation for the given panel from the URL:
- * annotPanelId, annotFrom, annotTo (epoch ms), annotText, annotTags (comma separated)
+ * annotPanelId, annotFrom, annotTo (epoch ms), annotText, annotTags (comma separated), annotNameKey, annotNameAuto
  */
 export function getAnnotationUrlPrefill(panelId: number): { range: TimeRange2; prefill: NewAnnotationPrefill } | null {
   const params = locationService.getSearch();
@@ -73,4 +84,37 @@ export function applyAnnotationPrefill(text: string | undefined, tags: string[],
 
 export function clearAnnotationUrlPrefill() {
   locationService.partial(Object.fromEntries(URL_PARAMS.map((param) => [param, null])), true);
+}
+
+const NAME_STORAGE_KEY = 'grafana.annotations.editorName';
+
+/** Label of the name input, e.g. submittedBy -> Submitted by */
+export function getAnnotationNameLabel(nameKey: string): string {
+  const words = nameKey.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function getDefaultAnnotationName(prefill?: NewAnnotationPrefill): string {
+  if (prefill?.nameAuto) {
+    return contextSrv.user.name || contextSrv.user.login || '';
+  }
+  return store.get(NAME_STORAGE_KEY) ?? '';
+}
+
+/**
+ * Data to save with an annotation so that it records the name under nameKey.
+ * Data already stored on the annotation is kept, since an update replaces the whole field.
+ */
+export async function buildAnnotationData(
+  id: number | string | null | undefined,
+  nameKey: string | undefined,
+  name: string | undefined
+): Promise<Record<string, unknown> | undefined> {
+  if (!nameKey || !name) {
+    return undefined;
+  }
+  store.set(NAME_STORAGE_KEY, name);
+
+  const existing = id != null ? (await getBackendSrv().get(`/api/annotations/${id}`))?.data : undefined;
+  return { ...(existing ?? {}), [nameKey]: name };
 }
