@@ -19,6 +19,11 @@ import { type TimeZone } from '@grafana/schema';
 import { ClickOutsideWrapper, floatingUtils, useStyles2 } from '@grafana/ui';
 import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/utils';
 
+import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
+import { FeedbackEditor } from '../feedback/FeedbackEditor';
+import { FeedbackTooltip } from '../feedback/FeedbackTooltip';
+import { isFeedbackEditor } from '../feedback/feedbackTags';
+
 import { AnnotationEditor2 } from './AnnotationEditor2';
 import { AnnotationTooltip2 } from './AnnotationTooltip2';
 import { AnnotationTooltip2Cluster } from './AnnotationTooltip2Cluster';
@@ -52,6 +57,10 @@ interface AnnotationMarkerProps {
   // Only provided for WIP markers — drives the parent's setNewRange. For
   // existing annotations the marker manages a local override instead.
   onResizeRange?: (from: number, to: number) => void;
+  // Opens the editor without user interaction, e.g. when requested from the URL
+  startEditing?: boolean;
+  editPrefill?: NewAnnotationPrefill;
+  onEditDone?: () => void;
 }
 
 export const AnnotationMarker2 = ({
@@ -69,6 +78,9 @@ export const AnnotationMarker2 = ({
   isPinned,
   plot,
   onResizeRange,
+  startEditing,
+  editPrefill,
+  onEditDone,
 }: AnnotationMarkerProps) => {
   const styles = useStyles2(getStyles);
   const placement = 'bottom';
@@ -78,6 +90,14 @@ export const AnnotationMarker2 = ({
   // Set when editing
   const [editAnnotationId, setEditAnnotationId] = useState(exitWipEdit != null ? annoIdx : null);
   const [isHovering, setIsHovering] = useState(false);
+  const startEditId = startEditing ? annoVals.id?.[annoIdx] : undefined;
+
+  useEffect(() => {
+    if (startEditId != null) {
+      setEditAnnotationId(startEditId);
+    }
+  }, [startEditId]);
+
   const isClustering =
     annoVals.isCluster?.[annoIdx] && annoVals.clusterIdx?.[annoIdx] != null && annoVals.clusterIdx?.[annoIdx] > -1;
   // Live override of (time, timeEnd) for the marker's primary annotation
@@ -168,6 +188,17 @@ export const AnnotationMarker2 = ({
         onEdit={(annotationId: number) => setEditAnnotationId(annotationId)}
       />
     );
+  } else if (showTooltip && isFeedbackEditor(replaceVariables) && !annoVals.alertId?.[annoIdx]) {
+    contents = (
+      <FeedbackTooltip
+        annoIdx={annoIdx}
+        annoVals={annoVals}
+        timeZone={timeZone}
+        onClose={onClose}
+        isPinned={isPinned}
+        onEdit={annoId != null ? () => setEditAnnotationId(annoId) : undefined}
+      />
+    );
   } else if (showTooltip) {
     contents = (
       <AnnotationTooltip2
@@ -182,20 +213,25 @@ export const AnnotationMarker2 = ({
       />
     );
   } else if (isEditing) {
-    contents = (
-      <AnnotationEditor2
-        annoIdx={editIdx}
-        annoVals={annoVals}
-        timeZone={timeZone}
-        liveTime={canSyncBoundaries ? liveTime : undefined}
-        liveTimeEnd={canSyncBoundaries ? liveTimeEnd : undefined}
-        onTimeRangeChange={canSyncBoundaries ? dispatchResize : undefined}
-        dismiss={() => {
-          exitWipEdit?.();
-          setEditAnnotationId(null);
-          onClose();
-        }}
-      />
+    const editorProps = {
+      annoIdx: editIdx,
+      annoVals,
+      timeZone,
+      liveTime: canSyncBoundaries ? liveTime : undefined,
+      liveTimeEnd: canSyncBoundaries ? liveTimeEnd : undefined,
+      onTimeRangeChange: canSyncBoundaries ? dispatchResize : undefined,
+      prefill: editPrefill,
+      dismiss: () => {
+        exitWipEdit?.();
+        onEditDone?.();
+        setEditAnnotationId(null);
+        onClose();
+      },
+    };
+    contents = isFeedbackEditor(replaceVariables) ? (
+      <FeedbackEditor {...editorProps} replaceVariables={replaceVariables} />
+    ) : (
+      <AnnotationEditor2 {...editorProps} />
     );
   }
 
@@ -286,14 +322,7 @@ export const AnnotationMarker2 = ({
   // the boundaries. Parent recomputes from base values, so we patch left/width
   // locally so the bar visually tracks the drag until save/cancel.
   let effectiveStyle = style;
-  if (
-    !isWip &&
-    liveOverride !== null &&
-    plot != null &&
-    style != null &&
-    isRegion &&
-    liveOverride.timeEnd != null
-  ) {
+  if (!isWip && liveOverride !== null && plot != null && style != null && isRegion && liveOverride.timeEnd != null) {
     const left = Math.round(plot.valToPos(liveOverride.time, 'x')) || 0;
     const right = Math.round(plot.valToPos(liveOverride.timeEnd, 'x')) || 0;
     const clampedLeft = Math.max(0, left);
@@ -326,18 +355,12 @@ export const AnnotationMarker2 = ({
           <div
             className={styles.dragHandleLeft}
             data-testid="annotation-resize-handle-start"
-            aria-label={t(
-              'timeseries.annotation-marker.resize-start',
-              'Drag to adjust annotation start'
-            )}
+            aria-label={t('timeseries.annotation-marker.resize-start', 'Drag to adjust annotation start')}
           />
           <div
             className={styles.dragHandleRight}
             data-testid="annotation-resize-handle-end"
-            aria-label={t(
-              'timeseries.annotation-marker.resize-end',
-              'Drag to adjust annotation end'
-            )}
+            aria-label={t('timeseries.annotation-marker.resize-end', 'Drag to adjust annotation end')}
           />
         </>
       )}
