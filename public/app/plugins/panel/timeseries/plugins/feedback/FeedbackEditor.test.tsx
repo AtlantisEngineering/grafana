@@ -68,7 +68,7 @@ describe('FeedbackEditor', () => {
       to: 1759389095560,
       tags: ['M1', 'Module_1', 'TP'],
       description: 'loose cable',
-      data: { authoredBy: 'Jan' },
+      data: { authoredBy: 'Jan', comments: [] },
     });
     expect(get).not.toHaveBeenCalled();
   });
@@ -92,6 +92,7 @@ describe('FeedbackEditor', () => {
     expect(screen.getByTestId('feedback-editor-reviewed-by')).toHaveValue('Piet');
 
     await userEvent.click(screen.getByText('Confirm'));
+    await userEvent.type(screen.getByTestId('feedback-editor-review-comment'), 'agreed');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(get).toHaveBeenCalledWith('/api/annotations/7');
@@ -101,8 +102,45 @@ describe('FeedbackEditor', () => {
       to: 1759389095560,
       tags: ['M1', 'M1B', 'FP', 'Confirmed'],
       description: 'loose cable',
-      data: { authoredBy: 'Jan', reviewedBy: 'Piet' },
+      data: {
+        authoredBy: 'Jan',
+        reviewedBy: 'Piet',
+        comments: [{ by: 'Piet', at: expect.any(Number), action: 'Confirmed', text: 'agreed' }],
+      },
     });
+  });
+
+  it('adds a reply to the conversation without reviewing', async () => {
+    get.mockResolvedValue({
+      id: 7,
+      data: { authoredBy: 'Jan', comments: [{ by: 'Jan', at: 1759388895560, text: 'first' }] },
+    });
+
+    render(
+      <FeedbackEditor
+        annoVals={{ ...range, tags: [['M1', 'TP']], text: ['x'], id: [7] }}
+        annoIdx={0}
+        timeZone="browser"
+        dismiss={jest.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByTestId('feedback-thread')).toHaveTextContent('first'));
+    await userEvent.type(screen.getByTestId('feedback-editor-reply'), 'are you sure?');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onAnnotationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: ['M1', 'TP'],
+        data: {
+          authoredBy: 'Jan',
+          comments: [
+            { by: 'Jan', at: 1759388895560, text: 'first' },
+            { by: 'Jan', at: expect.any(Number), text: 'are you sure?' },
+          ],
+        },
+      })
+    );
   });
 
   it('saves edits without a new review without touching the names', async () => {
@@ -162,7 +200,14 @@ describe('FeedbackEditor review on create', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(onAnnotationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ tags: ['M1', 'TP', 'Confirmed'], data: { authoredBy: 'Jan', reviewedBy: 'Jan' } })
+      expect.objectContaining({
+        tags: ['M1', 'TP', 'Confirmed'],
+        data: {
+          authoredBy: 'Jan',
+          reviewedBy: 'Jan',
+          comments: [{ by: 'Jan', at: expect.any(Number), action: 'Confirmed' }],
+        },
+      })
     );
   });
 });
@@ -201,7 +246,11 @@ describe('FeedbackEditor comment only', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(onAnnotationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ tags: ['M1'], description: 'press stopped for cleaning', data: { authoredBy: 'Jan' } })
+      expect.objectContaining({
+        tags: ['M1'],
+        description: 'press stopped for cleaning',
+        data: { authoredBy: 'Jan', comments: [] },
+      })
     );
   });
 });

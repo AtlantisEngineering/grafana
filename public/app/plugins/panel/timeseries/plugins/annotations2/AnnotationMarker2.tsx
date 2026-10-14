@@ -21,6 +21,7 @@ import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/
 
 import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
 import { FeedbackEditor } from '../feedback/FeedbackEditor';
+import { FeedbackTooltip } from '../feedback/FeedbackTooltip';
 import { isFeedbackEditor } from '../feedback/feedbackTags';
 
 import { AnnotationEditor2 } from './AnnotationEditor2';
@@ -164,17 +165,31 @@ export const AnnotationMarker2 = ({
     onClose();
   };
 
+  // Manual annotations on a feedback dashboard show as a feedback card
+  const isFeedback = isFeedbackEditor(replaceVariables) && !annoVals.alertId?.[annoIdx];
+
   const contents = showTooltip ? (
-    <AnnotationTooltip2
-      annoIdx={annoIdx}
-      annoVals={annoVals}
-      timeZone={timeZone}
-      onClose={onClose}
-      isPinned={isPinned}
-      onEdit={() => setState(STATE_EDITING)}
-      links={links}
-      actions={actions}
-    />
+    isFeedback ? (
+      <FeedbackTooltip
+        annoIdx={annoIdx}
+        annoVals={annoVals}
+        timeZone={timeZone}
+        onClose={onClose}
+        isPinned={isPinned}
+        onEdit={() => setState(STATE_EDITING)}
+      />
+    ) : (
+      <AnnotationTooltip2
+        annoIdx={annoIdx}
+        annoVals={annoVals}
+        timeZone={timeZone}
+        onClose={onClose}
+        isPinned={isPinned}
+        onEdit={() => setState(STATE_EDITING)}
+        links={links}
+        actions={actions}
+      />
+    )
   ) : showEditor ? (
     isFeedbackEditor(replaceVariables) ? (
       <FeedbackEditor
@@ -281,14 +296,7 @@ export const AnnotationMarker2 = ({
   // the boundaries. Parent recomputes from base values, so we patch left/width
   // locally so the bar visually tracks the drag until save/cancel.
   let effectiveStyle = style;
-  if (
-    !isWip &&
-    liveOverride !== null &&
-    plot != null &&
-    style != null &&
-    isRegion &&
-    liveOverride.timeEnd != null
-  ) {
+  if (!isWip && liveOverride !== null && plot != null && style != null && isRegion && liveOverride.timeEnd != null) {
     const left = Math.round(plot.valToPos(liveOverride.time, 'x')) || 0;
     const right = Math.round(plot.valToPos(liveOverride.timeEnd, 'x')) || 0;
     const clampedLeft = Math.max(0, left);
@@ -321,18 +329,12 @@ export const AnnotationMarker2 = ({
           <div
             className={styles.dragHandleLeft}
             data-testid="annotation-resize-handle-start"
-            aria-label={t(
-              'timeseries.annotation-marker.resize-start',
-              'Drag to adjust annotation start'
-            )}
+            aria-label={t('timeseries.annotation-marker.resize-start', 'Drag to adjust annotation start')}
           />
           <div
             className={styles.dragHandleRight}
             data-testid="annotation-resize-handle-end"
-            aria-label={t(
-              'timeseries.annotation-marker.resize-end',
-              'Drag to adjust annotation end'
-            )}
+            aria-label={t('timeseries.annotation-marker.resize-end', 'Drag to adjust annotation end')}
           />
         </>
       )}

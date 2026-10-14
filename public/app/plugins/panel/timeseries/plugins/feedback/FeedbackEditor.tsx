@@ -12,7 +12,6 @@ import {
   systemDateFormats,
 } from '@grafana/data';
 import { t } from '@grafana/i18n';
-import { getBackendSrv } from '@grafana/runtime';
 import {
   Button,
   DateTimePicker,
@@ -30,12 +29,19 @@ import { contextSrv } from 'app/core/services/context_srv';
 import { applyAnnotationPrefill, type NewAnnotationPrefill } from '../annotationUrlPrefill';
 import { AnnotationTooltipHeaderCloseIcon } from '../annotations2/AnnotationTooltipHeaderCloseIcon';
 
+import { FeedbackThread } from './FeedbackThread';
+import {
+  AUTHORED_BY,
+  type FeedbackComment,
+  REVIEWED_BY,
+  getComments,
+  loadFeedbackData,
+  mergeFeedbackData,
+} from './feedbackData';
 import { getFeedbackExtraTags, joinFeedbackTags, splitFeedbackTags } from './feedbackTags';
 
-const AUTHORED_BY = 'authoredBy';
 // Choice for feedback that is only a comment, without a class
 const COMMENT_ONLY = 'comment';
-const REVIEWED_BY = 'reviewedBy';
 
 export interface FeedbackAnnoVals {
   id?: Array<number | string | null | undefined>;
@@ -100,16 +106,13 @@ export const FeedbackEditor = ({
   const [reviewEnabled, setReviewEnabled] = useState(isUpdating);
   const [status, setStatus] = useState(initialStatus);
   const [reviewedBy, setReviewedBy] = useState(loggedInUser);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reply, setReply] = useState('');
+  const [replyBy, setReplyBy] = useState(loggedInUser);
   const [error, setError] = useState<string>();
 
   // Names live in the data field, which the panel's annotation frames don't carry
-  const stored = useAsync(async () => {
-    if (!isUpdating) {
-      return undefined;
-    }
-    const annotation = await getBackendSrv().get(`/api/annotations/${id}`);
-    return annotation?.data ?? {};
-  }, [id, isUpdating]);
+  const stored = useAsync(async () => (isUpdating ? loadFeedbackData(id) : undefined), [id, isUpdating]);
   useEffect(() => {
     if (stored.value) {
       setAuthoredBy(String(stored.value[AUTHORED_BY] ?? ''));
@@ -150,6 +153,10 @@ export const FeedbackEditor = ({
       setError(t('timeseries.feedback-editor.reviewer-required', 'Reviewed by is required'));
       return;
     }
+    if (reply.trim() && !replyBy.trim()) {
+      setError(t('timeseries.feedback-editor.reply-by-required', 'Your name is required to comment'));
+      return;
+    }
     if (endMs != null && endMs < startMs) {
       setError(t('timeseries.feedback-editor.invalid-range', 'End time must be after the start time'));
       return;
@@ -162,6 +169,17 @@ export const FeedbackEditor = ({
     if (isNewReview) {
       names[REVIEWED_BY] = reviewedBy.trim();
     }
+    const now = Date.now();
+    const newComments: FeedbackComment[] = [];
+    if (isNewReview) {
+      newComments.push({ by: reviewedBy.trim(), at: now, action: status, text: reviewComment.trim() || undefined });
+    }
+    if (reply.trim()) {
+      newComments.push({ by: replyBy.trim(), at: now, text: reply.trim() });
+    }
+    const hasNewData = Object.keys(names).length > 0 || newComments.length > 0;
+    const latest = hasNewData && isUpdating ? await loadFeedbackData(id) : {};
+
     const from = Math.round(startMs);
     const event: AnnotationEventUIModel = {
       // @ts-expect-error id is typed as string but the annotation API needs the number
@@ -170,7 +188,7 @@ export const FeedbackEditor = ({
       to: endMs != null ? Math.round(endMs) : from,
       tags: joinFeedbackTags(otherTags, feedbackClass, reviewEnabled ? status : initialStatus),
       description: comment.trim() || feedbackClass || '',
-      data: Object.keys(names).length > 0 ? { ...(stored.value ?? {}), ...names } : undefined,
+      data: hasNewData ? mergeFeedbackData(latest, names, newComments) : undefined,
     };
     await (isUpdating ? onAnnotationUpdate : onAnnotationCreate)?.(event);
     dismiss();
@@ -182,13 +200,15 @@ export const FeedbackEditor = ({
     status,
     reviewedBy,
     reviewEnabled,
+    reviewComment,
+    reply,
+    replyBy,
     isNewReview,
     startMs,
     endMs,
     otherTags,
     id,
     isUpdating,
-    stored.value,
   ]);
 
   const timeFormatter = (value: number) => dateTimeFormat(value, { format: systemDateFormats.fullDate, timeZone });
@@ -336,7 +356,48 @@ export const FeedbackEditor = ({
                 />
               </Field>
             </div>
+            <Field
+              noMargin
+              className={styles.reviewComment}
+              label={t('timeseries.feedback-editor.label-review-comment', 'Review comment (optional)')}
+            >
+              <TextArea
+                data-testid={'feedback-editor-review-comment'}
+                className={styles.textarea}
+                rows={2}
+                value={reviewComment}
+                disabled={!reviewEnabled}
+                onChange={(e) => setReviewComment(e.currentTarget.value)}
+              />
+            </Field>
           </fieldset>
+          {isUpdating && (
+            <Field noMargin label={t('timeseries.feedback-editor.label-conversation', 'Conversation')}>
+              <Stack direction="column" gap={1}>
+                <FeedbackThread comments={getComments(stored.value)} timeZone={timeZone} />
+                <TextArea
+                  data-testid={'feedback-editor-reply'}
+                  className={styles.textarea}
+                  rows={2}
+                  placeholder={t('timeseries.feedback-editor.reply-placeholder', 'Add a comment')}
+                  value={reply}
+                  onChange={(e) => {
+                    setReply(e.currentTarget.value);
+                    clearError();
+                  }}
+                />
+                <Input
+                  data-testid={'feedback-editor-reply-by'}
+                  prefix={t('timeseries.feedback-editor.reply-by', 'As')}
+                  value={replyBy}
+                  onChange={(e) => {
+                    setReplyBy(e.currentTarget.value);
+                    clearError();
+                  }}
+                />
+              </Stack>
+            </Field>
+          )}
           {(error || saveState.error) && <div className={styles.error}>{error ?? saveState.error?.message}</div>}
         </Stack>
       </div>
@@ -396,6 +457,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     '&:disabled': {
       opacity: 0.5,
     },
+  }),
+  reviewComment: css({
+    marginTop: theme.spacing(1),
   }),
   legend: css({
     fontSize: theme.typography.bodySmall.fontSize,
