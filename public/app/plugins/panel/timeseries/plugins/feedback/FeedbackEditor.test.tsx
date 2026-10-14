@@ -13,6 +13,8 @@ jest.mock('@grafana/ui', () => ({
 }));
 
 const mockUsePanelContext = jest.mocked(usePanelContext);
+// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+const panelContext = (context: object) => context as ReturnType<typeof usePanelContext>;
 const get = jest.fn();
 
 const variables: Record<string, string> = { '${annotation_feedback_tags}': '$Component', $Component: 'Module_1' };
@@ -29,13 +31,14 @@ describe('FeedbackEditor', () => {
     contextSrv.user.name = 'Jan';
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     setBackendSrv({ get } as unknown as BackendSrv);
-    // @ts-ignore
-    mockUsePanelContext.mockReturnValue({
-      onAnnotationCreate,
-      onAnnotationUpdate,
-      eventsScope: '',
-      eventBus: jest.fn(),
-    });
+    mockUsePanelContext.mockReturnValue(
+      panelContext({
+        onAnnotationCreate,
+        onAnnotationUpdate,
+        eventsScope: '',
+        eventBus: jest.fn(),
+      })
+    );
   });
 
   it('creates feedback authored by the logged in user, with the review section disabled', async () => {
@@ -132,13 +135,14 @@ describe('FeedbackEditor review on create', () => {
 
   it('can review new feedback right away once the review section is turned on', async () => {
     const onAnnotationCreate = jest.fn().mockResolvedValue(undefined);
-    // @ts-ignore
-    mockUsePanelContext.mockReturnValue({
-      onAnnotationCreate,
-      onAnnotationUpdate: jest.fn(),
-      eventsScope: '',
-      eventBus: jest.fn(),
-    });
+    mockUsePanelContext.mockReturnValue(
+      panelContext({
+        onAnnotationCreate,
+        onAnnotationUpdate: jest.fn(),
+        eventsScope: '',
+        eventBus: jest.fn(),
+      })
+    );
 
     render(
       <FeedbackEditor
@@ -171,13 +175,14 @@ describe('FeedbackEditor comment only', () => {
 
   it('saves a comment without a class tag, and needs the comment', async () => {
     const onAnnotationCreate = jest.fn().mockResolvedValue(undefined);
-    // @ts-ignore
-    mockUsePanelContext.mockReturnValue({
-      onAnnotationCreate,
-      onAnnotationUpdate: jest.fn(),
-      eventsScope: '',
-      eventBus: jest.fn(),
-    });
+    mockUsePanelContext.mockReturnValue(
+      panelContext({
+        onAnnotationCreate,
+        onAnnotationUpdate: jest.fn(),
+        eventsScope: '',
+        eventBus: jest.fn(),
+      })
+    );
 
     render(
       <FeedbackEditor
