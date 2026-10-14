@@ -20,6 +20,8 @@ import { ClickOutsideWrapper, floatingUtils, useStyles2 } from '@grafana/ui';
 import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/utils';
 
 import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
+import { FeedbackEditor } from '../feedback/FeedbackEditor';
+import { isFeedbackEditor } from '../feedback/feedbackTags';
 
 import { AnnotationEditor2 } from './AnnotationEditor2';
 import { AnnotationTooltip2 } from './AnnotationTooltip2';
@@ -199,22 +201,25 @@ export const AnnotationMarker2 = ({
       />
     );
   } else if (isEditing) {
-    contents = (
-      <AnnotationEditor2
-        annoIdx={editIdx}
-        annoVals={annoVals}
-        timeZone={timeZone}
-        liveTime={canSyncBoundaries ? liveTime : undefined}
-        liveTimeEnd={canSyncBoundaries ? liveTimeEnd : undefined}
-        onTimeRangeChange={canSyncBoundaries ? dispatchResize : undefined}
-        prefill={editPrefill}
-        dismiss={() => {
-          exitWipEdit?.();
-          onEditDone?.();
-          setEditAnnotationId(null);
-          onClose();
-        }}
-      />
+    const editorProps = {
+      annoIdx: editIdx,
+      annoVals,
+      timeZone,
+      liveTime: canSyncBoundaries ? liveTime : undefined,
+      liveTimeEnd: canSyncBoundaries ? liveTimeEnd : undefined,
+      onTimeRangeChange: canSyncBoundaries ? dispatchResize : undefined,
+      prefill: editPrefill,
+      dismiss: () => {
+        exitWipEdit?.();
+        onEditDone?.();
+        setEditAnnotationId(null);
+        onClose();
+      },
+    };
+    contents = isFeedbackEditor(replaceVariables) ? (
+      <FeedbackEditor {...editorProps} replaceVariables={replaceVariables} />
+    ) : (
+      <AnnotationEditor2 {...editorProps} />
     );
   }
 

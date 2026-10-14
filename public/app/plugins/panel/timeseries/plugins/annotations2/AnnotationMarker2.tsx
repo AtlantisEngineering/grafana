@@ -20,6 +20,8 @@ import { ClickOutsideWrapper, floatingUtils, useStyles2 } from '@grafana/ui';
 import { getDataLinks, getFieldActions } from 'app/plugins/panel/status-history/utils';
 
 import { type NewAnnotationPrefill } from '../annotationUrlPrefill';
+import { FeedbackEditor } from '../feedback/FeedbackEditor';
+import { isFeedbackEditor } from '../feedback/feedbackTags';
 
 import { AnnotationEditor2 } from './AnnotationEditor2';
 import { AnnotationTooltip2 } from './AnnotationTooltip2';
@@ -155,6 +157,13 @@ export const AnnotationMarker2 = ({
   // Show the tooltip if pinned or hovered
   const showTooltip = isTooltipPinned || isTooltipHovered;
 
+  const dismissEditor = () => {
+    exitWipEdit?.();
+    onEditDone?.();
+    setState(STATE_DEFAULT);
+    onClose();
+  };
+
   const contents = showTooltip ? (
     <AnnotationTooltip2
       annoIdx={annoIdx}
@@ -167,21 +176,30 @@ export const AnnotationMarker2 = ({
       actions={actions}
     />
   ) : showEditor ? (
-    <AnnotationEditor2
-      annoIdx={annoIdx}
-      annoVals={annoVals}
-      timeZone={timeZone}
-      liveTime={liveTime}
-      liveTimeEnd={liveTimeEnd}
-      onTimeRangeChange={dispatchResize}
-      prefill={editPrefill}
-      dismiss={() => {
-        exitWipEdit?.();
-        onEditDone?.();
-        setState(STATE_DEFAULT);
-        onClose();
-      }}
-    />
+    isFeedbackEditor(replaceVariables) ? (
+      <FeedbackEditor
+        annoIdx={annoIdx}
+        annoVals={annoVals}
+        timeZone={timeZone}
+        liveTime={liveTime}
+        liveTimeEnd={liveTimeEnd}
+        onTimeRangeChange={dispatchResize}
+        prefill={editPrefill}
+        replaceVariables={replaceVariables}
+        dismiss={dismissEditor}
+      />
+    ) : (
+      <AnnotationEditor2
+        annoIdx={annoIdx}
+        annoVals={annoVals}
+        timeZone={timeZone}
+        liveTime={liveTime}
+        liveTimeEnd={liveTimeEnd}
+        onTimeRangeChange={dispatchResize}
+        prefill={editPrefill}
+        dismiss={dismissEditor}
+      />
+    )
   ) : null;
 
   // Drag-resize for region boundaries while the editor is open (WIP or
