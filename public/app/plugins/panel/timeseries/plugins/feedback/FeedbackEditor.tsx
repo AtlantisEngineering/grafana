@@ -20,6 +20,7 @@ import {
   Input,
   RadioButtonGroup,
   Stack,
+  Switch,
   TextArea,
   usePanelContext,
   useStyles2,
@@ -95,6 +96,8 @@ export const FeedbackEditor = ({
   const feedbackClass = choice === COMMENT_ONLY ? undefined : choice;
   const [comment, setComment] = useState(initial.description);
   const [authoredBy, setAuthoredBy] = useState(isUpdating ? '' : loggedInUser);
+  // The review section is on for existing feedback; new feedback can turn it on to review right away
+  const [reviewEnabled, setReviewEnabled] = useState(isUpdating);
   const [status, setStatus] = useState(initialStatus);
   const [reviewedBy, setReviewedBy] = useState(loggedInUser);
   const [error, setError] = useState<string>();
@@ -128,7 +131,7 @@ export const FeedbackEditor = ({
     }
   }, [liveTimeEnd]);
 
-  const isNewReview = status != null && status !== initialStatus;
+  const isNewReview = reviewEnabled && status != null && status !== initialStatus;
 
   const [saveState, save] = useAsyncFn(async () => {
     if (!choice) {
@@ -165,7 +168,7 @@ export const FeedbackEditor = ({
       id,
       from,
       to: endMs != null ? Math.round(endMs) : from,
-      tags: joinFeedbackTags(otherTags, feedbackClass, status),
+      tags: joinFeedbackTags(otherTags, feedbackClass, reviewEnabled ? status : initialStatus),
       description: comment.trim() || feedbackClass || '',
       data: Object.keys(names).length > 0 ? { ...(stored.value ?? {}), ...names } : undefined,
     };
@@ -178,6 +181,7 @@ export const FeedbackEditor = ({
     authoredBy,
     status,
     reviewedBy,
+    reviewEnabled,
     isNewReview,
     startMs,
     endMs,
@@ -281,8 +285,22 @@ export const FeedbackEditor = ({
               }}
             />
           </Field>
-          <fieldset className={styles.review} disabled={!isUpdating} data-testid={'feedback-editor-review'}>
-            <legend className={styles.legend}>{t('timeseries.feedback-editor.review', 'Review')}</legend>
+          <fieldset className={styles.review} disabled={!reviewEnabled} data-testid={'feedback-editor-review'}>
+            <legend className={styles.legend}>
+              <Stack gap={1} alignItems={'center'}>
+                {t('timeseries.feedback-editor.review', 'Review')}
+                {!isUpdating && (
+                  <Switch
+                    data-testid={'feedback-editor-review-toggle'}
+                    value={reviewEnabled}
+                    onChange={(e) => {
+                      setReviewEnabled(e.currentTarget.checked);
+                      clearError();
+                    }}
+                  />
+                )}
+              </Stack>
+            </legend>
             <div className={styles.row}>
               <Field
                 noMargin
@@ -290,7 +308,7 @@ export const FeedbackEditor = ({
                 label={t('timeseries.feedback-editor.label-action', 'Action')}
               >
                 <RadioButtonGroup
-                  disabled={!isUpdating}
+                  disabled={!reviewEnabled}
                   options={[
                     { value: 'Confirmed', label: t('timeseries.feedback-editor.confirm', 'Confirm') },
                     { value: 'Rejected', label: t('timeseries.feedback-editor.reject', 'Reject') },
@@ -310,7 +328,7 @@ export const FeedbackEditor = ({
                 <Input
                   data-testid={'feedback-editor-reviewed-by'}
                   value={reviewedBy}
-                  disabled={!isUpdating}
+                  disabled={!reviewEnabled}
                   onChange={(e) => {
                     setReviewedBy(e.currentTarget.value);
                     clearError();

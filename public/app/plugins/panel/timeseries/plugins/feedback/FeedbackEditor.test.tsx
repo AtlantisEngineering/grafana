@@ -124,6 +124,45 @@ describe('FeedbackEditor', () => {
   });
 });
 
+describe('FeedbackEditor review on create', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    contextSrv.user.name = 'Jan';
+  });
+
+  it('can review new feedback right away once the review section is turned on', async () => {
+    const onAnnotationCreate = jest.fn().mockResolvedValue(undefined);
+    // @ts-ignore
+    mockUsePanelContext.mockReturnValue({
+      onAnnotationCreate,
+      onAnnotationUpdate: jest.fn(),
+      eventsScope: '',
+      eventBus: jest.fn(),
+    });
+
+    render(
+      <FeedbackEditor
+        annoVals={{ time: [1000], timeEnd: [2000], tags: [['M1']], id: [undefined] }}
+        annoIdx={0}
+        timeZone="browser"
+        dismiss={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('feedback-editor-review')).toBeDisabled();
+    await userEvent.click(screen.getByTestId('feedback-editor-review-toggle'));
+    expect(screen.getByTestId('feedback-editor-review')).toBeEnabled();
+
+    await userEvent.click(screen.getByText('TP'));
+    await userEvent.click(screen.getByText('Confirm'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onAnnotationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ tags: ['M1', 'TP', 'Confirmed'], data: { authoredBy: 'Jan', reviewedBy: 'Jan' } })
+    );
+  });
+});
+
 describe('FeedbackEditor comment only', () => {
   beforeEach(() => {
     jest.clearAllMocks();
