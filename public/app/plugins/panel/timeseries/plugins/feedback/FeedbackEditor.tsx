@@ -216,7 +216,9 @@ export const FeedbackEditor = ({
   const clearError = () => setError(undefined);
 
   return (
-    <div ref={clickAwayRef} className={styles.editor}>
+    // Clicks must not reach the marker underneath, which would pin its card
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div ref={clickAwayRef} className={styles.editor} onClick={(e) => e.stopPropagation()}>
       <div className={styles.header}>
         <Stack justifyContent={'space-between'} alignItems={'center'}>
           <div>

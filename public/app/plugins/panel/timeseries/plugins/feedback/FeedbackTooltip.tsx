@@ -4,7 +4,16 @@ import { useAsync } from 'react-use';
 
 import { dateTimeFormat, systemDateFormats, type GrafanaTheme2 } from '@grafana/data';
 import { t } from '@grafana/i18n';
-import { Badge, type BadgeColor, Button, IconButton, Stack, usePanelContext, useStyles2 } from '@grafana/ui';
+import {
+  Badge,
+  type BadgeColor,
+  Button,
+  ConfirmButton,
+  IconButton,
+  Stack,
+  usePanelContext,
+  useStyles2,
+} from '@grafana/ui';
 
 import { type FeedbackAnnoVals } from './FeedbackEditor';
 import { FeedbackThread } from './FeedbackThread';
@@ -26,13 +35,12 @@ interface Props {
 export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose, onEdit }: Props) => {
   const styles = useStyles2(getStyles);
   const focusRef = useRef<HTMLButtonElement | null>(null);
-  const { canEditAnnotations } = usePanelContext();
+  const { canEditAnnotations, canDeleteAnnotations, onAnnotationDelete } = usePanelContext();
   const id = annoVals.id?.[annoIdx] ?? undefined;
-  const canEdit =
-    id != null &&
-    id !== 0 &&
-    onEdit != null &&
-    (canEditAnnotations?.(annoVals.dashboardUID?.[annoIdx] ?? undefined) ?? false);
+  const dashboardUID = annoVals.dashboardUID?.[annoIdx] ?? undefined;
+  const canEdit = id != null && id !== 0 && onEdit != null && (canEditAnnotations?.(dashboardUID) ?? false);
+  const canDelete =
+    id != null && id !== 0 && onAnnotationDelete != null && (canDeleteAnnotations?.(dashboardUID) ?? false);
 
   useEffect(() => {
     if (isPinned) {
@@ -64,7 +72,11 @@ export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose
             <IconButton
               name={'times'}
               size={'sm'}
-              onClick={onClose}
+              onClick={(e) => {
+                // The marker underneath would pin the card again
+                e.stopPropagation();
+                onClose();
+              }}
               tooltip={t('timeseries.feedback-tooltip.close', 'Close')}
             />
           )}
@@ -111,12 +123,24 @@ export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose
           )}
         </Stack>
       </div>
-      {canEdit && (
+      {(canEdit || canDelete) && (
         <div className={styles.footer}>
-          <Stack justifyContent={'flex-end'}>
-            <Button ref={focusRef} size={'sm'} variant="secondary" onClick={onEdit}>
-              {t('timeseries.feedback-tooltip.reply-review', 'Reply / review')}
-            </Button>
+          <Stack justifyContent={'flex-end'} alignItems={'center'}>
+            {canDelete && (
+              <ConfirmButton
+                size={'sm'}
+                confirmText={t('timeseries.feedback-tooltip.delete-confirm', 'Delete feedback')}
+                confirmVariant={'destructive'}
+                onConfirm={() => onAnnotationDelete!(String(id))}
+              >
+                {t('timeseries.feedback-tooltip.delete', 'Delete')}
+              </ConfirmButton>
+            )}
+            {canEdit && (
+              <Button ref={focusRef} size={'sm'} variant="secondary" onClick={onEdit}>
+                {t('timeseries.feedback-tooltip.reply-review', 'Reply / review')}
+              </Button>
+            )}
           </Stack>
         </div>
       )}

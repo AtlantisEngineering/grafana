@@ -82,4 +82,46 @@ describe('FeedbackTooltip', () => {
     expect(screen.queryByRole('button', { name: 'Reply / review' })).not.toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/api/annotations/8'));
   });
+
+  it('closes without the click reaching the marker', async () => {
+    get.mockResolvedValue({ id: 9, data: {} });
+    const onClose = jest.fn();
+    const onMarkerClick = jest.fn();
+
+    render(
+      <div onClick={onMarkerClick}>
+        <FeedbackTooltip
+          annoVals={{ id: [9], time: [1000], tags: [['TP']], text: ['x'] }}
+          annoIdx={0}
+          timeZone="browser"
+          isPinned={true}
+          onClose={onClose}
+        />
+      </div>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalled();
+    expect(onMarkerClick).not.toHaveBeenCalled();
+  });
+
+  it('deletes the feedback after confirming', async () => {
+    get.mockResolvedValue({ id: 10, data: {} });
+    const onAnnotationDelete = jest.fn();
+    mockUsePanelContext.mockReturnValue(panelContext({ canDeleteAnnotations: () => true, onAnnotationDelete }));
+
+    render(
+      <FeedbackTooltip
+        annoVals={{ id: [10], time: [1000], tags: [['TP']], text: ['x'] }}
+        annoIdx={0}
+        timeZone="browser"
+        isPinned={true}
+        onClose={jest.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete feedback' }));
+    expect(onAnnotationDelete).toHaveBeenCalledWith('10');
+  });
 });
