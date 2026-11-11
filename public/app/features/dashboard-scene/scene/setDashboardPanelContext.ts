@@ -68,6 +68,7 @@ export function setDashboardPanelContext(vizPanel: VizPanel, context: PanelConte
       timeEnd: isRegion ? event.to : 0,
       tags: event.tags,
       text: event.description,
+      data: event.data,
     };
 
     await annotationServer().save(anno);
@@ -90,6 +91,7 @@ export function setDashboardPanelContext(vizPanel: VizPanel, context: PanelConte
       timeEnd: isRegion ? event.to : 0,
       tags: event.tags,
       text: event.description,
+      data: event.data,
     };
 
     await annotationServer().update(anno);

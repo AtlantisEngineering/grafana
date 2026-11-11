@@ -423,6 +423,7 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
       timeEnd: isRegion ? event.to : 0,
       tags: event.tags,
       text: event.description,
+      data: event.data,
     };
     await annotationServer().save(anno);
     getDashboardQueryRunner().run({ dashboard: this.props.dashboard, range: this.timeSrv.timeRange() });
@@ -446,6 +447,7 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
       timeEnd: isRegion ? event.to : 0,
       tags: event.tags,
       text: event.description,
+      data: event.data,
     };
     await annotationServer().update(anno);
 
