@@ -1,7 +1,30 @@
 import { type InterpolateFunction } from '@grafana/data';
+import { t } from '@grafana/i18n';
 
 export const FEEDBACK_CLASSES = ['TP', 'FP', 'TN', 'FN'];
 export const FEEDBACK_STATUSES = ['Confirmed', 'Rejected'];
+
+/** Plain-language name and explanation of each feedback class */
+export function getFeedbackClassInfo(): Record<string, { label: string; help: string }> {
+  return {
+    TP: {
+      label: t('timeseries.feedback-class.tp', 'Real problem'),
+      help: t('timeseries.feedback-class.tp-help', 'The alarm was right: there was a real problem (TP).'),
+    },
+    FP: {
+      label: t('timeseries.feedback-class.fp', 'False alarm'),
+      help: t('timeseries.feedback-class.fp-help', 'There was an alarm but no real problem (FP).'),
+    },
+    TN: {
+      label: t('timeseries.feedback-class.tn', 'No problem'),
+      help: t('timeseries.feedback-class.tn-help', 'No alarm and no problem: the press ran normally (TN).'),
+    },
+    FN: {
+      label: t('timeseries.feedback-class.fn', 'Missed problem'),
+      help: t('timeseries.feedback-class.fn-help', 'There was a real problem but no alarm (FN).'),
+    },
+  };
+}
 
 const EDITOR_VARIABLE = '${annotation_editor}';
 const TAGS_VARIABLE = '${annotation_feedback_tags}';

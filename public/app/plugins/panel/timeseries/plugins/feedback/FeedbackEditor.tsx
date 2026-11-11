@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import { useEffect, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react';
 import { useAsync, useAsyncFn, useClickAway } from 'react-use';
 
 import {
@@ -34,11 +34,12 @@ import {
   AUTHORED_BY,
   type FeedbackComment,
   REVIEWED_BY,
+  forgetCachedDashboards,
   getComments,
   loadFeedbackData,
   mergeFeedbackData,
 } from './feedbackData';
-import { getFeedbackExtraTags, joinFeedbackTags, splitFeedbackTags } from './feedbackTags';
+import { getFeedbackClassInfo, getFeedbackExtraTags, joinFeedbackTags, splitFeedbackTags } from './feedbackTags';
 
 // Choice for feedback that is only a comment, without a class
 const COMMENT_ONLY = 'comment';
@@ -64,9 +65,8 @@ interface Props {
 }
 
 /**
- * Annotation popup for feedback: TP/FP, a comment, who authored it, and a review section
- * (Confirm / Reject, who reviewed it) that is enabled once the feedback exists.
- * Tags and names are kept out of the text; names go to the annotation's data field.
+ * Annotation popup for feedback. New feedback: class, comment, author. Existing feedback opens
+ * for approval, with the feedback itself summarised. Names go to the annotation's data field.
  */
 export const FeedbackEditor = ({
   annoVals,
@@ -110,6 +110,26 @@ export const FeedbackEditor = ({
   const [reply, setReply] = useState('');
   const [replyBy, setReplyBy] = useState(loggedInUser);
   const [error, setError] = useState<string>();
+  // Existing feedback shows a summary until the reviewer chooses to edit it
+  const [editingFeedback, setEditingFeedback] = useState(!isUpdating);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  // Drag the popup by its header
+  const startDrag = (e: ReactMouseEvent) => {
+    if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) {
+      return;
+    }
+    e.preventDefault();
+    const startX = e.clientX - offset.x;
+    const startY = e.clientY - offset.y;
+    const onMove = (m: MouseEvent) => setOffset({ x: m.clientX - startX, y: m.clientY - startY });
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
 
   // Names live in the data field, which the panel's annotation frames don't carry
   const stored = useAsync(async () => (isUpdating ? loadFeedbackData(id) : undefined), [id, isUpdating]);
@@ -191,6 +211,7 @@ export const FeedbackEditor = ({
       data: hasNewData ? mergeFeedbackData(latest, names, newComments) : undefined,
     };
     await (isUpdating ? onAnnotationUpdate : onAnnotationCreate)?.(event);
+    forgetCachedDashboards();
     dismiss();
   }, [
     choice,
@@ -214,16 +235,34 @@ export const FeedbackEditor = ({
   const timeFormatter = (value: number) => dateTimeFormat(value, { format: systemDateFormats.fullDate, timeZone });
   const headerLabel = endMs != null ? `${timeFormatter(startMs)} - ${timeFormatter(endMs)}` : timeFormatter(startMs);
   const clearError = () => setError(undefined);
+  const classInfo = getFeedbackClassInfo();
+  const choiceHelp =
+    choice === COMMENT_ONLY
+      ? t('timeseries.feedback-editor.comment-only-description', 'Leave a comment without judging the alarm.')
+      : choice
+        ? classInfo[choice]?.help
+        : t('timeseries.feedback-editor.class-hint', 'How did the alarm match what happened on the press?');
+  const saveLabel = !isNewReview
+    ? t('timeseries.feedback-editor.save', 'Save')
+    : status === 'Rejected'
+      ? t('timeseries.feedback-editor.reject-button', 'Reject')
+      : t('timeseries.feedback-editor.approve-button', 'Approve');
 
   return (
     // Clicks must not reach the marker underneath, which would pin its card
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-    <div ref={clickAwayRef} className={styles.editor} onClick={(e) => e.stopPropagation()}>
-      <div className={styles.header}>
+    <div
+      ref={clickAwayRef}
+      className={styles.editor}
+      style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+      <div className={styles.header} onMouseDown={startDrag} data-testid={'feedback-editor-header'}>
         <Stack justifyContent={'space-between'} alignItems={'center'}>
           <div>
             {isUpdating
-              ? t('timeseries.feedback-editor.edit', 'Feedback')
+              ? t('timeseries.feedback-editor.approve-title', 'Approve feedback')
               : t('timeseries.feedback-editor.add', 'Leave feedback')}
           </div>
           <div>{headerLabel}</div>
@@ -238,79 +277,99 @@ export const FeedbackEditor = ({
       </div>
       <div className={styles.content}>
         <Stack direction="column" gap={1.5}>
-          <Field noMargin label={t('timeseries.feedback-editor.label-class', 'Feedback')}>
-            <RadioButtonGroup
-              options={[
-                { value: 'TP', label: 'TP', description: t('timeseries.feedback-editor.tp', 'True positive') },
-                { value: 'FP', label: 'FP', description: t('timeseries.feedback-editor.fp', 'False positive') },
-                { value: 'TN', label: 'TN', description: t('timeseries.feedback-editor.tn', 'True negative') },
-                { value: 'FN', label: 'FN', description: t('timeseries.feedback-editor.fn', 'False negative') },
-                {
-                  value: COMMENT_ONLY,
-                  label: t('timeseries.feedback-editor.comment-only', 'Comment only'),
-                  description: t(
-                    'timeseries.feedback-editor.comment-only-description',
-                    'Leave a comment without a class'
-                  ),
-                },
-              ]}
-              value={choice}
-              onChange={(value) => {
-                setChoice(value);
-                clearError();
-              }}
-            />
-          </Field>
-          <div className={styles.row}>
-            <Field noMargin className={styles.rowField} label={t('timeseries.feedback-editor.label-start', 'Start')}>
-              <DateTimePicker
-                date={dateTime(startMs)}
-                timeZone={timeZone}
-                onChange={(d?: DateTime) => {
-                  if (d) {
-                    setStartMs(d.valueOf());
-                    onTimeRangeChange?.(d.valueOf(), endMs);
-                  }
-                }}
-              />
-            </Field>
-            <Field noMargin className={styles.rowField} label={t('timeseries.feedback-editor.label-end', 'End')}>
-              <DateTimePicker
-                date={dateTime(endMs ?? startMs)}
-                timeZone={timeZone}
-                minDate={new Date(startMs)}
-                onChange={(d?: DateTime) => {
-                  if (d) {
-                    setEndMs(d.valueOf());
-                    onTimeRangeChange?.(startMs, d.valueOf());
-                  }
-                }}
-              />
-            </Field>
-          </div>
-          <Field noMargin label={t('timeseries.feedback-editor.label-comment', 'Comment')}>
-            <TextArea
-              data-testid={'feedback-editor-comment'}
-              className={styles.textarea}
-              value={comment}
-              onChange={(e) => setComment(e.currentTarget.value)}
-            />
-          </Field>
-          <Field noMargin label={t('timeseries.feedback-editor.label-authored-by', 'Authored by')}>
-            <Input
-              data-testid={'feedback-editor-authored-by'}
-              value={authoredBy}
-              disabled={isUpdating}
-              onChange={(e) => {
-                setAuthoredBy(e.currentTarget.value);
-                clearError();
-              }}
-            />
-          </Field>
+          {editingFeedback ? (
+            <>
+              <Field noMargin label={t('timeseries.feedback-editor.label-class', 'Feedback')} description={choiceHelp}>
+                <RadioButtonGroup
+                  options={[
+                    ...['TP', 'FP', 'TN', 'FN'].map((value) => ({ value, label: classInfo[value].label })),
+                    { value: COMMENT_ONLY, label: t('timeseries.feedback-editor.comment-only', 'Comment only') },
+                  ]}
+                  value={choice}
+                  onChange={(value) => {
+                    setChoice(value);
+                    clearError();
+                  }}
+                />
+              </Field>
+              <div className={styles.row}>
+                <Field
+                  noMargin
+                  className={styles.rowField}
+                  label={t('timeseries.feedback-editor.label-start', 'Start')}
+                >
+                  <DateTimePicker
+                    date={dateTime(startMs)}
+                    timeZone={timeZone}
+                    onChange={(d?: DateTime) => {
+                      if (d) {
+                        setStartMs(d.valueOf());
+                        onTimeRangeChange?.(d.valueOf(), endMs);
+                      }
+                    }}
+                  />
+                </Field>
+                <Field noMargin className={styles.rowField} label={t('timeseries.feedback-editor.label-end', 'End')}>
+                  <DateTimePicker
+                    date={dateTime(endMs ?? startMs)}
+                    timeZone={timeZone}
+                    minDate={new Date(startMs)}
+                    onChange={(d?: DateTime) => {
+                      if (d) {
+                        setEndMs(d.valueOf());
+                        onTimeRangeChange?.(startMs, d.valueOf());
+                      }
+                    }}
+                  />
+                </Field>
+              </div>
+              <Field noMargin label={t('timeseries.feedback-editor.label-comment', 'Comment')}>
+                <TextArea
+                  data-testid={'feedback-editor-comment'}
+                  className={styles.textarea}
+                  value={comment}
+                  onChange={(e) => setComment(e.currentTarget.value)}
+                />
+              </Field>
+              <Field noMargin label={t('timeseries.feedback-editor.label-authored-by', 'Authored by')}>
+                <Input
+                  data-testid={'feedback-editor-authored-by'}
+                  value={authoredBy}
+                  disabled={isUpdating}
+                  onChange={(e) => {
+                    setAuthoredBy(e.currentTarget.value);
+                    clearError();
+                  }}
+                />
+              </Field>
+            </>
+          ) : (
+            <div className={styles.summary} data-testid={'feedback-editor-summary'}>
+              <Stack justifyContent={'space-between'} alignItems={'flex-start'}>
+                <div>
+                  <b>
+                    {feedbackClass
+                      ? classInfo[feedbackClass]?.label
+                      : t('timeseries.feedback-editor.comment', 'Comment')}
+                  </b>
+                  {authoredBy && (
+                    <span className={styles.muted}>
+                      {' '}
+                      {t('timeseries.feedback-editor.by', 'by')} {authoredBy}
+                    </span>
+                  )}
+                  {comment && <div className={styles.summaryText}>{comment}</div>}
+                </div>
+                <Button size={'sm'} variant="secondary" fill="text" icon="pen" onClick={() => setEditingFeedback(true)}>
+                  {t('timeseries.feedback-editor.edit-feedback', 'Edit feedback')}
+                </Button>
+              </Stack>
+            </div>
+          )}
           <fieldset className={styles.review} disabled={!reviewEnabled} data-testid={'feedback-editor-review'}>
             <legend className={styles.legend}>
               <Stack gap={1} alignItems={'center'}>
-                {t('timeseries.feedback-editor.review', 'Review')}
+                {t('timeseries.feedback-editor.approval', 'Approval')}
                 {!isUpdating && (
                   <Switch
                     data-testid={'feedback-editor-review-toggle'}
@@ -332,7 +391,7 @@ export const FeedbackEditor = ({
                 <RadioButtonGroup
                   disabled={!reviewEnabled}
                   options={[
-                    { value: 'Confirmed', label: t('timeseries.feedback-editor.confirm', 'Confirm') },
+                    { value: 'Confirmed', label: t('timeseries.feedback-editor.approve', 'Approve') },
                     { value: 'Rejected', label: t('timeseries.feedback-editor.reject', 'Reject') },
                   ]}
                   value={status}
@@ -345,7 +404,7 @@ export const FeedbackEditor = ({
               <Field
                 noMargin
                 className={styles.rowField}
-                label={t('timeseries.feedback-editor.label-reviewed-by', 'Reviewed by')}
+                label={t('timeseries.feedback-editor.label-reviewed-by', 'Approved by')}
               >
                 <Input
                   data-testid={'feedback-editor-reviewed-by'}
@@ -361,7 +420,7 @@ export const FeedbackEditor = ({
             <Field
               noMargin
               className={styles.reviewComment}
-              label={t('timeseries.feedback-editor.label-review-comment', 'Review comment (optional)')}
+              label={t('timeseries.feedback-editor.label-review-comment', 'Approval comment (optional)')}
             >
               <TextArea
                 data-testid={'feedback-editor-review-comment'}
@@ -409,7 +468,7 @@ export const FeedbackEditor = ({
             {t('timeseries.feedback-editor.cancel', 'Cancel')}
           </Button>
           <Button size={'sm'} disabled={saveState.loading || stored.loading} onClick={() => save()}>
-            {t('timeseries.feedback-editor.save', 'Save')}
+            {saveLabel}
           </Button>
         </Stack>
       </div>
@@ -424,7 +483,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     borderRadius: theme.shape.radius.default,
     boxShadow: theme.shadows.z3,
     userSelect: 'text',
-    width: '520px',
+    width: '600px',
   }),
   header: css({
     borderBottom: `1px solid ${theme.colors.border.weak}`,
@@ -432,6 +491,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     fontWeight: theme.typography.fontWeightBold,
     fontSize: theme.typography.fontSize,
     color: theme.colors.text.primary,
+    cursor: 'move',
+    userSelect: 'none',
   }),
   content: css({
     padding: theme.spacing(1),
@@ -469,6 +530,18 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: theme.spacing(0, 0.5),
     width: 'auto',
     marginBottom: 0,
+  }),
+  summary: css({
+    background: theme.colors.background.secondary,
+    borderRadius: theme.shape.radius.default,
+    padding: theme.spacing(1),
+  }),
+  summaryText: css({
+    whiteSpace: 'pre-wrap',
+    marginTop: theme.spacing(0.5),
+  }),
+  muted: css({
+    color: theme.colors.text.secondary,
   }),
   error: css({
     color: theme.colors.error.text,

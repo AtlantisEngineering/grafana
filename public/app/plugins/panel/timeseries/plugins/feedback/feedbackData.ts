@@ -1,4 +1,5 @@
 import { getBackendSrv } from '@grafana/runtime';
+import { getDashboardScenePageStateManager } from 'app/features/dashboard-scene/pages/DashboardScenePageStateManager';
 
 export const AUTHORED_BY = 'authoredBy';
 export const REVIEWED_BY = 'reviewedBy';
@@ -37,4 +38,9 @@ export function mergeFeedbackData(
   newComments: FeedbackComment[]
 ): FeedbackData {
   return { ...latest, ...names, comments: [...getComments(latest), ...newComments] };
+}
+
+/** Drops cached dashboards so lists of feedback (e.g. the Feedback dashboard) reload when navigated back to */
+export function forgetCachedDashboards() {
+  getDashboardScenePageStateManager().clearSceneCache();
 }

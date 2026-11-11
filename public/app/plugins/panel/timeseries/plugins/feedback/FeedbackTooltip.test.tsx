@@ -52,7 +52,7 @@ describe('FeedbackTooltip', () => {
       />
     );
 
-    expect(screen.getByText('FP')).toBeInTheDocument();
+    expect(screen.getByText('False alarm')).toBeInTheDocument();
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0);
     expect(screen.getByText('M1B')).toBeInTheDocument();
     expect(screen.getByText('loose cable')).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe('FeedbackTooltip', () => {
       />
     );
 
-    expect(screen.getByText('Not reviewed')).toBeInTheDocument();
+    expect(screen.getByText('Not approved yet')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reply / review' })).not.toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/api/annotations/8'));
   });

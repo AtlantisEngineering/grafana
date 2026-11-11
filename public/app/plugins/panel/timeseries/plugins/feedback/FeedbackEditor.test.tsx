@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { setBackendSrv, type BackendSrv } from '@grafana/runtime';
@@ -58,7 +58,7 @@ describe('FeedbackEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Choose a class or comment only')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText('TP'));
+    await userEvent.click(screen.getByText('Real problem'));
     await userEvent.type(screen.getByTestId('feedback-editor-comment'), 'loose cable');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -86,14 +86,15 @@ describe('FeedbackEditor', () => {
       />
     );
 
-    await waitFor(() => expect(screen.getByTestId('feedback-editor-authored-by')).toHaveValue('Jan'));
-    expect(screen.getByTestId('feedback-editor-authored-by')).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId('feedback-editor-summary')).toHaveTextContent('False alarm by Jan'));
+    expect(screen.getByTestId('feedback-editor-summary')).toHaveTextContent('loose cable');
+    expect(screen.queryByTestId('feedback-editor-authored-by')).not.toBeInTheDocument();
     expect(screen.getByTestId('feedback-editor-review')).toBeEnabled();
     expect(screen.getByTestId('feedback-editor-reviewed-by')).toHaveValue('Piet');
 
-    await userEvent.click(screen.getByText('Confirm'));
+    await userEvent.click(screen.getByText('Approve'));
     await userEvent.type(screen.getByTestId('feedback-editor-review-comment'), 'agreed');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     expect(get).toHaveBeenCalledWith('/api/annotations/7');
     expect(onAnnotationUpdate).toHaveBeenCalledWith({
@@ -155,13 +156,50 @@ describe('FeedbackEditor', () => {
       />
     );
 
-    await waitFor(() => expect(screen.getByTestId('feedback-editor-authored-by')).toHaveValue('Jan'));
-    await userEvent.click(screen.getByText('FP'));
+    await waitFor(() => expect(screen.getByTestId('feedback-editor-summary')).toHaveTextContent('Jan'));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit feedback' }));
+    expect(screen.getByTestId('feedback-editor-authored-by')).toBeDisabled();
+    await userEvent.click(screen.getByText('False alarm'));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(onAnnotationUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ tags: ['M1', 'FP', 'Rejected'], data: undefined })
     );
+  });
+});
+
+describe('FeedbackEditor popup', () => {
+  beforeEach(() => {
+    mockUsePanelContext.mockReturnValue(panelContext({ eventsScope: '', eventBus: jest.fn() }));
+  });
+
+  it('explains the chosen class', async () => {
+    render(
+      <FeedbackEditor
+        annoVals={{ time: [1000], tags: [[]], id: [undefined] }}
+        annoIdx={0}
+        timeZone="browser"
+        dismiss={jest.fn()}
+      />
+    );
+    await userEvent.click(screen.getByText('False alarm'));
+    expect(screen.getByText('There was an alarm but no real problem (FP).')).toBeInTheDocument();
+  });
+
+  it('moves when its header is dragged', async () => {
+    render(
+      <FeedbackEditor
+        annoVals={{ time: [1000], tags: [[]], id: [undefined] }}
+        annoIdx={0}
+        timeZone="browser"
+        dismiss={jest.fn()}
+      />
+    );
+    const header = screen.getByTestId('feedback-editor-header');
+    fireEvent.mouseDown(header, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.mouseMove(document, { clientX: 60, clientY: 30 });
+    fireEvent.mouseUp(document);
+    await waitFor(() => expect(header.parentElement).toHaveStyle({ transform: 'translate(50px, 20px)' }));
   });
 });
 
@@ -195,9 +233,9 @@ describe('FeedbackEditor review on create', () => {
     await userEvent.click(screen.getByTestId('feedback-editor-review-toggle'));
     expect(screen.getByTestId('feedback-editor-review')).toBeEnabled();
 
-    await userEvent.click(screen.getByText('TP'));
-    await userEvent.click(screen.getByText('Confirm'));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByText('Real problem'));
+    await userEvent.click(screen.getByText('Approve'));
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     expect(onAnnotationCreate).toHaveBeenCalledWith(
       expect.objectContaining({

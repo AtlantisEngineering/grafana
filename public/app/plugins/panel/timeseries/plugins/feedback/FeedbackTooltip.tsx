@@ -17,8 +17,15 @@ import {
 
 import { type FeedbackAnnoVals } from './FeedbackEditor';
 import { FeedbackThread } from './FeedbackThread';
-import { AUTHORED_BY, type FeedbackData, REVIEWED_BY, getComments, loadFeedbackData } from './feedbackData';
-import { splitFeedbackTags } from './feedbackTags';
+import {
+  AUTHORED_BY,
+  type FeedbackData,
+  REVIEWED_BY,
+  forgetCachedDashboards,
+  getComments,
+  loadFeedbackData,
+} from './feedbackData';
+import { getFeedbackClassInfo, splitFeedbackTags } from './feedbackTags';
 
 const CLASS_COLORS: Record<string, BadgeColor> = { TP: 'green', FP: 'red', TN: 'blue', FN: 'orange' };
 
@@ -86,15 +93,21 @@ export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose
         <Stack direction="column" gap={1}>
           <Stack gap={0.5} wrap={'wrap'}>
             {feedbackClass ? (
-              <Badge text={feedbackClass} color={CLASS_COLORS[feedbackClass] ?? 'darkgrey'} />
+              <Badge
+                text={getFeedbackClassInfo()[feedbackClass]?.label ?? feedbackClass}
+                color={CLASS_COLORS[feedbackClass] ?? 'darkgrey'}
+              />
             ) : (
               <Badge text={t('timeseries.feedback-tooltip.comment', 'Comment')} color={'darkgrey'} />
             )}
             {status ? (
-              <Badge text={status} color={status === 'Rejected' ? 'red' : 'green'} />
+              <Badge
+                text={status === 'Confirmed' ? t('timeseries.feedback-tooltip.approved', 'Approved') : status}
+                color={status === 'Rejected' ? 'red' : 'green'}
+              />
             ) : (
               feedbackClass && (
-                <Badge text={t('timeseries.feedback-tooltip.unreviewed', 'Not reviewed')} color={'orange'} />
+                <Badge text={t('timeseries.feedback-tooltip.unreviewed', 'Not approved yet')} color={'orange'} />
               )
             )}
             {other.map((tag) => (
@@ -113,7 +126,7 @@ export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose
               )}
               {reviewedBy && (
                 <span>
-                  {t('timeseries.feedback-tooltip.reviewed-by', 'Reviewed by')} <b>{String(reviewedBy)}</b>
+                  {t('timeseries.feedback-tooltip.reviewed-by', 'Approved by')} <b>{String(reviewedBy)}</b>
                 </span>
               )}
             </div>
@@ -131,7 +144,10 @@ export const FeedbackTooltip = ({ annoVals, annoIdx, timeZone, isPinned, onClose
                 size={'sm'}
                 confirmText={t('timeseries.feedback-tooltip.delete-confirm', 'Delete feedback')}
                 confirmVariant={'destructive'}
-                onConfirm={() => onAnnotationDelete!(String(id))}
+                onConfirm={async () => {
+                  await onAnnotationDelete!(String(id));
+                  forgetCachedDashboards();
+                }}
               >
                 {t('timeseries.feedback-tooltip.delete', 'Delete')}
               </ConfirmButton>
