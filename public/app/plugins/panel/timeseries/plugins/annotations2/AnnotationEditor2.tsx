@@ -1,11 +1,27 @@
 import { css } from '@emotion/css';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Controller } from 'react-hook-form';
 import { useAsyncFn, useClickAway } from 'react-use';
 
-import { type AnnotationEventUIModel, type GrafanaTheme2, dateTimeFormat, systemDateFormats } from '@grafana/data';
+import {
+  type AnnotationEventUIModel,
+  type DateTime,
+  type GrafanaTheme2,
+  dateTime,
+  dateTimeFormat,
+  systemDateFormats,
+} from '@grafana/data';
 import { Trans, t } from '@grafana/i18n';
-import { Button, Field, Stack, TextArea, usePanelContext, useStyles2 } from '@grafana/ui';
+import {
+  Button,
+  DateTimePicker,
+  Field,
+  Stack,
+  Switch,
+  TextArea,
+  usePanelContext,
+  useStyles2,
+} from '@grafana/ui';
 import { Form } from 'app/core/components/Form/Form';
 import { TagFilter } from 'app/core/components/TagFilter/TagFilter';
 import { annotationServer } from 'app/features/annotations/api';
@@ -17,6 +33,9 @@ interface Props {
   annoIdx: number;
   timeZone: string;
   dismiss: () => void;
+  liveTime?: number;
+  liveTimeEnd?: number | null;
+  onTimeRangeChange?: (time: number, timeEnd: number | null) => void;
 }
 
 interface AnnotationEditFormDTO {
@@ -24,7 +43,16 @@ interface AnnotationEditFormDTO {
   tags: string[];
 }
 
-export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...otherProps }: Props) => {
+export const AnnotationEditor2 = ({
+  annoVals,
+  annoIdx,
+  dismiss,
+  timeZone,
+  liveTime,
+  liveTimeEnd,
+  onTimeRangeChange,
+  ...otherProps
+}: Props) => {
   const styles = useStyles2(getStyles);
   const { onAnnotationCreate, onAnnotationUpdate } = usePanelContext();
   const focusRef = useRef<HTMLButtonElement | null>(null);
@@ -32,7 +60,7 @@ export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...oth
 
   useClickAway(clickAwayRef, dismiss);
 
-  // focus text area on render
+  // focus close button on render
   useEffect(() => {
     focusRef.current?.focus();
   }, []);
@@ -56,20 +84,93 @@ export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...oth
     });
 
   const isUpdatingAnnotation = annoVals.id?.[annoIdx] != null;
-  const isRegionAnnotation = annoVals.isRegion?.[annoIdx];
+  const initialIsRegion = annoVals.isRegion?.[annoIdx] === true;
   const operation = isUpdatingAnnotation ? updateAnnotation : createAnnotation;
   const stateIndicator = isUpdatingAnnotation ? updateAnnotationState : createAnnotationState;
-  const time = isRegionAnnotation
-    ? `${timeFormatter(annoVals.time[annoIdx])} - ${timeFormatter(annoVals.timeEnd[annoIdx])}`
-    : timeFormatter(annoVals.time[annoIdx]);
+
+  const initialStart = liveTime ?? annoVals.time[annoIdx];
+  const initialEndRaw = liveTimeEnd !== undefined ? liveTimeEnd : annoVals.timeEnd?.[annoIdx];
+  const initialEnd = initialEndRaw != null ? initialEndRaw : null;
+
+  const [startMs, setStartMs] = useState<number>(initialStart);
+  const [endMs, setEndMs] = useState<number | null>(initialEnd);
+  const [isRegion, setIsRegion] = useState<boolean>(initialIsRegion || initialEnd != null);
+
+  useEffect(() => {
+    if (liveTime != null) {
+      setStartMs(liveTime);
+    }
+  }, [liveTime]);
+
+  useEffect(() => {
+    if (liveTimeEnd !== undefined) {
+      setEndMs(liveTimeEnd);
+      if (liveTimeEnd != null) {
+        setIsRegion(true);
+      }
+    }
+  }, [liveTimeEnd]);
+
+  const updateStart = useCallback(
+    (next: number) => {
+      setStartMs(next);
+      onTimeRangeChange?.(next, isRegion ? endMs : null);
+    },
+    [onTimeRangeChange, isRegion, endMs]
+  );
+
+  const updateEnd = useCallback(
+    (next: number | null) => {
+      setEndMs(next);
+      onTimeRangeChange?.(startMs, next);
+    },
+    [onTimeRangeChange, startMs]
+  );
+
+  const toggleRegion = (next: boolean) => {
+    setIsRegion(next);
+    if (next) {
+      const fallback = endMs ?? startMs + 60_000;
+      setEndMs(fallback);
+      onTimeRangeChange?.(startMs, fallback);
+    } else {
+      setEndMs(null);
+      onTimeRangeChange?.(startMs, null);
+    }
+  };
+
+  const headerLabel =
+    isRegion && endMs != null
+      ? `${timeFormatter(startMs)} - ${timeFormatter(endMs)}`
+      : timeFormatter(startMs);
+
+  let boundaryError: string | undefined;
+  if (!Number.isFinite(startMs)) {
+    boundaryError = t('timeseries.annotation-editor2.invalid-start', 'Start time is invalid');
+  } else if (isRegion) {
+    if (endMs == null || !Number.isFinite(endMs)) {
+      boundaryError = t('timeseries.annotation-editor2.invalid-end', 'End time is invalid');
+    } else if (endMs < startMs) {
+      boundaryError = t(
+        'timeseries.annotation-editor2.invalid-range',
+        'End time must be after the start time'
+      );
+    }
+  }
 
   const onSubmit = ({ tags, description }: AnnotationEditFormDTO) => {
+    if (boundaryError != null) {
+      return;
+    }
+    const from = Math.round(startMs);
+    const to = isRegion && endMs != null ? Math.round(endMs) : from;
+
     operation({
       id: annoVals.id?.[annoIdx] ?? undefined,
       tags,
       description,
-      from: Math.round(annoVals.time[annoIdx]!),
-      to: Math.round(annoVals.timeEnd?.[annoIdx] ?? annoVals.time[annoIdx]!),
+      from,
+      to,
     });
   };
 
@@ -84,7 +185,7 @@ export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...oth
                 ? t('timeseries.annotation-editor2.edit-annotation', 'Edit annotation')
                 : t('timeseries.annotation-editor2.add-annotation', 'Add annotation')}
             </div>
-            <div>{time}</div>
+            <div>{headerLabel}</div>
           </Stack>
           <AnnotationTooltipHeaderCloseIcon
             forwardRef={focusRef}
@@ -117,6 +218,56 @@ export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...oth
                     })}
                   />
                 </Field>
+                <div className={styles.timeRow}>
+                  <Field
+                    className={styles.timeField}
+                    label={
+                      isRegion
+                        ? t('timeseries.annotation-editor2.label-start', 'Start')
+                        : t('timeseries.annotation-editor2.label-time', 'Time')
+                    }
+                  >
+                    <DateTimePicker
+                      date={dateTime(startMs)}
+                      timeZone={timeZone}
+                      onChange={(d?: DateTime) => {
+                        if (d) {
+                          updateStart(d.valueOf());
+                        }
+                      }}
+                    />
+                  </Field>
+                  {isRegion && (
+                    <Field
+                      className={styles.timeField}
+                      label={t('timeseries.annotation-editor2.label-end', 'End')}
+                    >
+                      <DateTimePicker
+                        date={dateTime(endMs ?? startMs)}
+                        timeZone={timeZone}
+                        minDate={new Date(startMs)}
+                        onChange={(d?: DateTime) => {
+                          if (d) {
+                            updateEnd(d.valueOf());
+                          }
+                        }}
+                      />
+                    </Field>
+                  )}
+                </div>
+                <Field
+                  label={t('timeseries.annotation-editor2.label-region', 'Region annotation')}
+                  description={t(
+                    'timeseries.annotation-editor2.region-description',
+                    'When enabled, the annotation spans a time range'
+                  )}
+                >
+                  <Switch
+                    value={isRegion}
+                    onChange={(e) => toggleRegion(e.currentTarget.checked)}
+                  />
+                </Field>
+                {boundaryError != null && <div className={styles.boundaryError}>{boundaryError}</div>}
                 <Field label={t('timeseries.annotation-editor2.label-tags', 'Tags')}>
                   <Controller
                     control={control}
@@ -140,7 +291,11 @@ export const AnnotationEditor2 = ({ annoVals, annoIdx, dismiss, timeZone, ...oth
                   <Button size={'sm'} variant="secondary" onClick={dismiss} fill="outline">
                     <Trans i18nKey="timeseries.annotation-editor2.cancel">Cancel</Trans>
                   </Button>
-                  <Button size={'sm'} type={'submit'} disabled={stateIndicator?.loading}>
+                  <Button
+                    size={'sm'}
+                    type={'submit'}
+                    disabled={stateIndicator?.loading || boundaryError != null}
+                  >
                     {stateIndicator?.loading
                       ? t('timeseries.annotation-editor2.saving', 'Saving')
                       : t('timeseries.annotation-editor2.save', 'Save')}
@@ -163,7 +318,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       borderRadius: theme.shape.radius.default,
       boxShadow: theme.shadows.z3,
       userSelect: 'text',
-      width: '460px',
+      width: '520px',
     }),
     content: css({
       padding: theme.spacing(1),
@@ -182,6 +337,19 @@ const getStyles = (theme: GrafanaTheme2) => {
     textarea: css({
       color: theme.colors.text.secondary,
       fontSize: theme.typography.bodySmall.fontSize,
+    }),
+    timeRow: css({
+      display: 'flex',
+      gap: theme.spacing(1),
+    }),
+    timeField: css({
+      flex: 1,
+      minWidth: 0,
+    }),
+    boundaryError: css({
+      color: theme.colors.error.text,
+      fontSize: theme.typography.bodySmall.fontSize,
+      marginBottom: theme.spacing(1),
     }),
   };
 };

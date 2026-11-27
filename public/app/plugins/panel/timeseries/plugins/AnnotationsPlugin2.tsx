@@ -321,6 +321,12 @@ export const AnnotationsPlugin2 = ({
               portalRoot={portalRoot}
               canExecuteActions={userCanExecuteActions}
               replaceVariables={replaceVariables}
+              plot={plot}
+              onResizeRange={
+                isWipFrame
+                  ? (from, to) => setNewRange({ from, to })
+                  : undefined
+              }
             />
           );
         }
